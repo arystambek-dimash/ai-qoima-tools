@@ -3,8 +3,14 @@ import { query, queryOne } from '../../db/index.js';
 import { News, ApiResponse, CreateNewsRequest, UpdateNewsRequest } from '../../types/index.js';
 import { getPaginationParams, getPaginationMeta } from '../../utils/pagination.js';
 import { validationError, notFoundError, AppError } from '../../middleware/errorHandler.js';
-import { triggerNewsCollection, getCollectionStatus } from '../../services/cronJobs.js';
-import { generateArticleContent, generateMissingArticles } from '../../services/articleGenerator.js';
+import {
+  triggerNewsCollection,
+  triggerArticleGeneration,
+  triggerBatchArticleGeneration,
+  getCollectionStatus,
+} from '../../services/cronJobs.js';
+import { getJobStatus, getQueueStats, JobNames, JobStatus } from '../../services/jobQueue.js';
+import { getWorkerStatus } from '../../services/jobWorker.js';
 
 // Grok API configuration (xAI)
 const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
@@ -37,24 +43,88 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // GET /api/v1/admin/news/collection-status
-// Returns the status of the automated news collection system
-router.get('/collection-status', async (_req: Request, res: Response, _next: NextFunction) => {
-  const status = getCollectionStatus();
-  res.json({
-    data: status,
-    meta: {
-      description: 'Automated news collection runs every hour. Collects from RSS feeds and generates AI tips.',
-    },
-  });
+// Returns the status of the automated news collection system and worker
+router.get('/collection-status', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const status = await getCollectionStatus();
+    const workerStatus = getWorkerStatus();
+
+    res.json({
+      data: {
+        ...status,
+        worker: workerStatus,
+      },
+      meta: {
+        description: 'Automated news collection runs every hour. Jobs are processed by the background worker.',
+        howItWorks: 'Main server queues jobs -> Background worker processes them -> Server stays responsive',
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/v1/admin/news/jobs/:jobId
+// Get status of a specific job
+router.get('/jobs/:jobId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { jobId } = req.params;
+    const job: JobStatus | null = await getJobStatus(jobId);
+
+    if (!job) {
+      throw notFoundError('Job');
+    }
+
+    res.json({
+      data: {
+        id: job.id,
+        name: job.name,
+        state: job.state,
+        data: job.data,
+        output: job.output,
+        retryCount: job.retrycount,
+        startedOn: job.startedon,
+        completedOn: job.completedon,
+        createdOn: job.createdon,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/v1/admin/news/queue-stats
+// Get statistics for all job queues
+router.get('/queue-stats', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const [newsStats, articleStats, batchStats] = await Promise.all([
+      getQueueStats(JobNames.NEWS_COLLECTION),
+      getQueueStats(JobNames.ARTICLE_GENERATION),
+      getQueueStats(JobNames.ARTICLE_GENERATION_BATCH),
+    ]);
+
+    res.json({
+      data: {
+        [JobNames.NEWS_COLLECTION]: newsStats,
+        [JobNames.ARTICLE_GENERATION]: articleStats,
+        [JobNames.ARTICLE_GENERATION_BATCH]: batchStats,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 // POST /api/v1/admin/news/collect
-// Manually triggers the automated news collection
+// Manually triggers the automated news collection (queues a background job)
 router.post('/collect', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await triggerNewsCollection();
     res.json({
       data: result,
+      meta: {
+        note: 'Job has been queued and will be processed by the background worker. Server remains responsive.',
+      },
     });
   } catch (error) {
     next(error);
@@ -62,15 +132,17 @@ router.post('/collect', async (_req: Request, res: Response, next: NextFunction)
 });
 
 // POST /api/v1/admin/news/generate-articles
-// Generate full article content with AI translations for news without content
+// Queue batch article generation (background job - non-blocking)
 router.post('/generate-articles', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const limit = parseInt(req.query.limit as string) || 5;
-    const generated = await generateMissingArticles(limit);
+    const result = await triggerBatchArticleGeneration(limit);
+
     res.json({
-      data: { generated },
+      data: result,
       meta: {
-        description: `Generated full articles for ${generated} news items using gpt-4o-mini`,
+        description: 'Batch article generation job queued. Will process in background.',
+        checkStatus: result.jobId ? `/api/v1/admin/news/jobs/${result.jobId}` : null,
       },
     });
   } catch (error) {
@@ -79,7 +151,7 @@ router.post('/generate-articles', async (req: Request, res: Response, next: Next
 });
 
 // POST /api/v1/admin/news/:id/generate-article
-// Generate full article content for a specific news item
+// Queue article generation for a specific news item (background job)
 router.post('/:id/generate-article', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
@@ -89,22 +161,13 @@ router.post('/:id/generate-article', async (req: Request, res: Response, next: N
       throw notFoundError('News item');
     }
 
-    const result = await generateArticleContent(id);
-
-    if (!result) {
-      throw new AppError(500, 'GENERATION_FAILED', 'Failed to generate article content. Check OpenAI API key.');
-    }
-
-    // Get the updated news item
-    const updatedNews = await queryOne<News>(`SELECT * FROM news WHERE id = $1`, [id]);
+    const result = await triggerArticleGeneration(id);
 
     res.json({
-      data: updatedNews,
+      data: result,
       meta: {
-        translations: {
-          ru: { title: result.translations.ru.title, hasContent: !!result.translations.ru.content },
-          kk: { title: result.translations.kk.title, hasContent: !!result.translations.kk.content },
-        },
+        newsId: id,
+        checkStatus: result.jobId ? `/api/v1/admin/news/jobs/${result.jobId}` : null,
       },
     });
   } catch (error) {

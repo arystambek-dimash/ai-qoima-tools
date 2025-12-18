@@ -13,6 +13,7 @@ import subscribersRouter from './routes/subscribers.js';
 import aiRouter from './routes/ai.js';
 import adminRouter from './routes/admin/index.js';
 import { initCronJobs } from './services/cronJobs.js';
+import { startJobQueue } from './services/jobQueue.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -51,12 +52,31 @@ app.use((_req, res) => {
 // Error handler
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`API available at http://localhost:${PORT}/api/v1`);
+// Start server
+async function startServer() {
+  try {
+    // Initialize job queue connection (for enqueueing jobs)
+    // Note: The actual job processing happens in the worker process
+    await startJobQueue();
+    console.log('Job queue initialized (main server can now enqueue jobs)');
 
-  // Initialize cron jobs for automated news collection
-  initCronJobs();
-});
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`API available at http://localhost:${PORT}/api/v1`);
+      console.log('');
+      console.log('IMPORTANT: Start the background worker in a separate terminal:');
+      console.log('  npm run worker');
+      console.log('');
+
+      // Initialize cron jobs (scheduler - just enqueues jobs)
+      initCronJobs();
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
 
 export default app;
