@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Loader2, Save } from 'lucide-react';
-import { getPrompt, createPrompt, updatePrompt, getUseCases, type Prompt, type UseCase } from '@/lib/admin-api';
+import { ArrowLeft, Loader2, Save, X, Check, Wrench } from 'lucide-react';
+import { getPrompt, createPrompt, updatePrompt, getUseCases, getTools, type Prompt, type UseCase, type Tool } from '@/lib/admin-api';
 
 export default function PromptEditor() {
   const router = useRouter();
@@ -16,6 +16,8 @@ export default function PromptEditor() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [useCases, setUseCases] = useState<UseCase[]>([]);
+  const [tools, setTools] = useState<Tool[]>([]);
+  const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
 
   const [form, setForm] = useState({
     slug: '',
@@ -26,34 +28,32 @@ export default function PromptEditor() {
   });
 
   useEffect(() => {
-    loadUseCases();
-    if (!isNew) {
-      loadPrompt();
-    }
+    loadData();
   }, [id, isNew]);
 
-  const loadUseCases = async () => {
+  const loadData = async () => {
     try {
-      const { data } = await getUseCases();
-      setUseCases(data);
-    } catch (error) {
-      console.error('Failed to load use cases:', error);
-    }
-  };
+      const [useCasesRes, toolsRes] = await Promise.all([
+        getUseCases(),
+        getTools()
+      ]);
+      setUseCases(useCasesRes.data);
+      setTools(toolsRes.data);
 
-  const loadPrompt = async () => {
-    try {
-      const { data } = await getPrompt(id);
-      setForm({
-        slug: data.slug,
-        title: data.title,
-        prompt_text: data.prompt_text,
-        category: data.category || '',
-        use_case_id: data.use_case_id || '',
-      });
+      if (!isNew) {
+        const { data } = await getPrompt(id);
+        setForm({
+          slug: data.slug,
+          title: data.title,
+          prompt_text: data.prompt_text,
+          category: data.category || '',
+          use_case_id: data.use_case_id || '',
+        });
+        setSelectedToolIds(data.tool_ids || []);
+      }
     } catch (error) {
-      console.error('Failed to load prompt:', error);
-      setError('Failed to load prompt');
+      console.error('Failed to load data:', error);
+      setError('Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -71,6 +71,7 @@ export default function PromptEditor() {
         prompt_text: form.prompt_text,
         category: form.category || undefined,
         use_case_id: form.use_case_id || undefined,
+        tool_ids: selectedToolIds,
       };
 
       if (isNew) {
@@ -96,6 +97,16 @@ export default function PromptEditor() {
     setForm((prev) => ({ ...prev, slug }));
   };
 
+  const toggleTool = (toolId: string) => {
+    setSelectedToolIds(prev => 
+      prev.includes(toolId) 
+        ? prev.filter(id => id !== toolId)
+        : [...prev, toolId]
+    );
+  };
+
+  const getToolById = (toolId: string) => tools.find(t => t.id === toolId);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -108,7 +119,7 @@ export default function PromptEditor() {
     <div>
       <div className="mb-6">
         <Link
-          href="/admin/prompts"
+          href="../prompts"
           className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 transition mb-4"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -119,7 +130,7 @@ export default function PromptEditor() {
         </h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="max-w-2xl">
+      <form onSubmit={handleSubmit} className="max-w-3xl">
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
           {error && (
             <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-600">
@@ -196,6 +207,73 @@ export default function PromptEditor() {
             </select>
           </div>
 
+          {/* Tools Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Wrench className="inline h-4 w-4 mr-1" />
+              Linked Tools
+            </label>
+            <p className="text-xs text-gray-500 mb-3">
+              Select the AI tools this prompt is optimized for. This helps users find prompts for their favorite tools.
+            </p>
+            
+            {/* Selected Tools */}
+            {selectedToolIds.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {selectedToolIds.map(toolId => {
+                  const tool = getToolById(toolId);
+                  if (!tool) return null;
+                  return (
+                    <span
+                      key={toolId}
+                      className="inline-flex items-center gap-1.5 bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg text-sm font-medium"
+                    >
+                      {tool.name}
+                      <button
+                        type="button"
+                        onClick={() => toggleTool(toolId)}
+                        className="hover:bg-indigo-200 rounded-full p-0.5"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Tools Grid */}
+            <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 p-2">
+                {tools.map((tool) => {
+                  const isSelected = selectedToolIds.includes(tool.id);
+                  return (
+                    <button
+                      key={tool.id}
+                      type="button"
+                      onClick={() => toggleTool(tool.id)}
+                      className={`flex items-center gap-2 p-2.5 rounded-lg text-left transition text-sm ${
+                        isSelected
+                          ? 'bg-indigo-50 border-2 border-indigo-500 text-indigo-700'
+                          : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 ${
+                        isSelected ? 'bg-indigo-500 text-white' : 'bg-gray-200'
+                      }`}>
+                        {isSelected && <Check className="h-3.5 w-3.5" />}
+                      </div>
+                      <span className="truncate font-medium">{tool.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              {selectedToolIds.length} tool{selectedToolIds.length !== 1 ? 's' : ''} selected
+            </p>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Prompt Text <span className="text-red-500">*</span>
@@ -204,7 +282,7 @@ export default function PromptEditor() {
               value={form.prompt_text}
               onChange={(e) => setForm((prev) => ({ ...prev, prompt_text: e.target.value }))}
               placeholder="Enter the full prompt template here. You can use placeholders like [TOPIC], [AUDIENCE], etc."
-              rows={10}
+              rows={12}
               className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-sm"
               required
             />
@@ -215,7 +293,7 @@ export default function PromptEditor() {
 
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
             <Link
-              href="/admin/prompts"
+              href="../prompts"
               className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition"
             >
               Cancel

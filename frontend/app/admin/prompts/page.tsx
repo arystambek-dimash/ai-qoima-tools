@@ -1,31 +1,45 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { Plus, Pencil, Trash2, Loader2, Search } from 'lucide-react';
-import { getPrompts, deletePrompt, type Prompt } from '@/lib/admin-api';
+import { Plus, Pencil, Trash2, Loader2, Search, Wrench } from 'lucide-react';
+import { getPrompts, deletePrompt, getTools, type Prompt, type Tool } from '@/lib/admin-api';
 
 export default function PromptsAdmin() {
   const [prompts, setPrompts] = useState<Prompt[]>([]);
+  const [tools, setTools] = useState<Tool[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    loadPrompts();
+    loadData();
   }, []);
 
-  const loadPrompts = async () => {
+  const loadData = async () => {
     try {
-      const { data } = await getPrompts();
-      setPrompts(data);
+      const [promptsRes, toolsRes] = await Promise.all([
+        getPrompts(),
+        getTools()
+      ]);
+      setPrompts(promptsRes.data);
+      setTools(toolsRes.data);
     } catch (error) {
-      console.error('Failed to load prompts:', error);
+      console.error('Failed to load data:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  // Create tool map for quick lookup
+  const toolMap = useMemo(() => {
+    const map: Record<string, Tool> = {};
+    tools.forEach(tool => {
+      map[tool.id] = tool;
+    });
+    return map;
+  }, [tools]);
 
   const handleDelete = async (id: string) => {
     setDeleting(true);
@@ -48,15 +62,20 @@ export default function PromptsAdmin() {
       (prompt.category && prompt.category.toLowerCase().includes(search.toLowerCase()))
   );
 
+  const getToolsForPrompt = (prompt: Prompt): Tool[] => {
+    if (!prompt.tool_ids || !Array.isArray(prompt.tool_ids)) return [];
+    return prompt.tool_ids.map(id => toolMap[id]).filter(Boolean);
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Prompts</h1>
-          <p className="text-gray-600 mt-1">Manage prompt templates</p>
+          <p className="text-gray-600 mt-1">Manage prompt templates and link them to tools</p>
         </div>
         <Link
-          href="/admin/prompts/new"
+          href="./prompts/new"
           className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-white font-medium hover:bg-indigo-700 transition"
         >
           <Plus className="h-5 w-5" />
@@ -94,45 +113,75 @@ export default function PromptsAdmin() {
               <tr>
                 <th className="text-left px-6 py-3 text-sm font-semibold text-gray-900">Title</th>
                 <th className="text-left px-6 py-3 text-sm font-semibold text-gray-900">Category</th>
+                <th className="text-left px-6 py-3 text-sm font-semibold text-gray-900">
+                  <div className="flex items-center gap-1">
+                    <Wrench className="h-4 w-4" />
+                    Linked Tools
+                  </div>
+                </th>
                 <th className="text-left px-6 py-3 text-sm font-semibold text-gray-900">Slug</th>
                 <th className="text-right px-6 py-3 text-sm font-semibold text-gray-900">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredPrompts.map((prompt) => (
-                <tr key={prompt.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <p className="font-medium text-gray-900">{prompt.title}</p>
-                    <p className="text-sm text-gray-500 truncate max-w-md">{prompt.prompt_text.slice(0, 100)}...</p>
-                  </td>
-                  <td className="px-6 py-4">
-                    {prompt.category && (
-                      <span className="inline-block bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded">
-                        {prompt.category}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <code className="text-sm bg-gray-100 px-2 py-1 rounded">{prompt.slug}</code>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-end gap-2">
-                      <Link
-                        href={`/admin/prompts/${prompt.id}`}
-                        className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-indigo-600 transition"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Link>
-                      <button
-                        onClick={() => setDeleteConfirm(prompt.id)}
-                        className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-red-600 transition"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {filteredPrompts.map((prompt) => {
+                const linkedTools = getToolsForPrompt(prompt);
+                return (
+                  <tr key={prompt.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <p className="font-medium text-gray-900">{prompt.title}</p>
+                      <p className="text-sm text-gray-500 truncate max-w-md">{prompt.prompt_text.slice(0, 80)}...</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      {prompt.category && (
+                        <span className="inline-block bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded">
+                          {prompt.category}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {linkedTools.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {linkedTools.slice(0, 3).map(tool => (
+                            <span
+                              key={tool.id}
+                              className="inline-block bg-indigo-100 text-indigo-700 text-xs px-2 py-1 rounded"
+                            >
+                              {tool.name}
+                            </span>
+                          ))}
+                          {linkedTools.length > 3 && (
+                            <span className="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded">
+                              +{linkedTools.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-sm">No tools linked</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <code className="text-sm bg-gray-100 px-2 py-1 rounded">{prompt.slug}</code>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-end gap-2">
+                        <Link
+                          href={`./prompts/${prompt.id}`}
+                          className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-indigo-600 transition"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Link>
+                        <button
+                          onClick={() => setDeleteConfirm(prompt.id)}
+                          className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-red-600 transition"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

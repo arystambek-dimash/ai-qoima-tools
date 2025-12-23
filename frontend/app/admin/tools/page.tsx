@@ -56,7 +56,7 @@ export default function ToolsAdmin() {
           <p className="text-gray-600 mt-1">Manage AI tools in the catalog</p>
         </div>
         <Link
-          href="/admin/tools/new"
+          href="./tools/new"
           className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-white font-medium hover:bg-indigo-700 transition"
         >
           <Plus className="h-5 w-5" />
@@ -139,7 +139,7 @@ export default function ToolsAdmin() {
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-2">
                       <Link
-                        href={`/admin/tools/${tool.id}`}
+                        href={`./tools/${tool.id}`}
                         className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-indigo-600 transition"
                       >
                         <Pencil className="h-4 w-4" />

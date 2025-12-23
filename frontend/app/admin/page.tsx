@@ -46,7 +46,7 @@ export default function AdminDashboard() {
       label: 'Use Cases',
       value: stats.useCases,
       icon: FolderKanban,
-      href: '/admin/use-cases',
+      href: './use-cases',
       color: 'bg-blue-500',
       bgLight: 'bg-blue-50',
     },
@@ -54,7 +54,7 @@ export default function AdminDashboard() {
       label: 'Tools',
       value: stats.tools,
       icon: Wrench,
-      href: '/admin/tools',
+      href: './tools',
       color: 'bg-green-500',
       bgLight: 'bg-green-50',
     },
@@ -62,7 +62,7 @@ export default function AdminDashboard() {
       label: 'Prompts',
       value: stats.prompts,
       icon: MessageSquareText,
-      href: '/admin/prompts',
+      href: './prompts',
       color: 'bg-purple-500',
       bgLight: 'bg-purple-50',
     },
@@ -70,17 +70,17 @@ export default function AdminDashboard() {
       label: 'News',
       value: stats.news,
       icon: Newspaper,
-      href: '/admin/news',
+      href: './news',
       color: 'bg-orange-500',
       bgLight: 'bg-orange-50',
     },
   ];
 
   const quickActions = [
-    { label: 'Add Use Case', href: '/admin/use-cases/new', icon: FolderKanban },
-    { label: 'Add Tool', href: '/admin/tools/new', icon: Wrench },
-    { label: 'Add Prompt', href: '/admin/prompts/new', icon: MessageSquareText },
-    { label: 'Add News', href: '/admin/news/new', icon: Newspaper },
+    { label: 'Add Use Case', href: './use-cases/new', icon: FolderKanban },
+    { label: 'Add Tool', href: './tools/new', icon: Wrench },
+    { label: 'Add Prompt', href: './prompts/new', icon: MessageSquareText },
+    { label: 'Add News', href: './news/new', icon: Newspaper },
   ];
 
   return (

@@ -55,7 +55,7 @@ export default function UseCasesAdmin() {
           <p className="text-gray-600 mt-1">Manage use cases for the platform</p>
         </div>
         <Link
-          href="/admin/use-cases/new"
+          href="./use-cases/new"
           className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-white font-medium hover:bg-indigo-700 transition"
         >
           <Plus className="h-5 w-5" />
@@ -111,7 +111,7 @@ export default function UseCasesAdmin() {
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-2">
                       <Link
-                        href={`/admin/use-cases/${useCase.id}`}
+                        href={`./use-cases/${useCase.id}`}
                         className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-indigo-600 transition"
                       >
                         <Pencil className="h-4 w-4" />

@@ -1,14 +1,14 @@
 import { getRequestConfig } from 'next-intl/server';
 import { cookies, headers } from 'next/headers';
 
-export const locales = ['en', 'ru', 'kk'] as const;
+export const locales = ['ru', 'kk', 'en'] as const;
 export type Locale = (typeof locales)[number];
-export const defaultLocale: Locale = 'en';
+export const defaultLocale: Locale = 'ru';
 
 export const localeNames: Record<Locale, string> = {
-  en: 'English',
   ru: 'Русский',
   kk: 'Қазақша',
+  en: 'English',
 };
 
 export default getRequestConfig(async () => {

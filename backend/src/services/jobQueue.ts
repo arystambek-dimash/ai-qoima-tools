@@ -178,6 +178,61 @@ export async function getRecentJobs(name: JobName, limit = 10): Promise<JobStatu
   return (jobs || []) as JobStatus[];
 }
 
+// Schedule hourly news collection
+export async function scheduleHourlyNewsCollection(): Promise<void> {
+  const queue = await getJobQueue();
+  const scheduleName = 'hourly-news-collection';
+  
+  // Unschedule existing schedule to avoid duplicates
+  try {
+    await queue.unschedule(scheduleName);
+    console.log('[JobQueue] Removed existing schedule');
+  } catch (e) {
+    // Schedule might not exist, ignore
+  }
+  
+  // Schedule news collection every hour at minute 0
+  // Cron: "0 * * * *" = every hour at minute 0
+  // pg-boss schedule signature: schedule(name, cron, data?, options?)
+  await queue.schedule(
+    JobNames.NEWS_COLLECTION, // Job queue name to send to
+    '0 * * * *', // Every hour at minute 0
+    {
+      triggeredBy: 'cron',
+      triggeredAt: new Date().toISOString(),
+    },
+    {
+      singletonKey: scheduleName,
+      retryLimit: 3,
+      retryDelay: 300, // 5 minutes between retries
+    }
+  );
+  
+  console.log('[JobQueue] Scheduled hourly news collection (cron: "0 * * * *")');
+}
+
+// Get schedule info
+export async function getScheduleInfo(): Promise<{
+  name: string;
+  cron: string;
+  nextRun: Date | null;
+}[]> {
+  const queue = await getJobQueue();
+  
+  try {
+    // Get schedules from pg-boss
+    const schedules = await queue.getSchedules();
+    return schedules.map((s: any) => ({
+      name: s.name,
+      cron: s.cron,
+      nextRun: s.nextRun || null,
+    }));
+  } catch (e) {
+    console.error('[JobQueue] Failed to get schedules:', e);
+    return [];
+  }
+}
+
 export default {
   getJobQueue,
   startJobQueue,
@@ -186,5 +241,7 @@ export default {
   getJobStatus,
   getQueueStats,
   getRecentJobs,
+  scheduleHourlyNewsCollection,
+  getScheduleInfo,
   JobNames,
 };

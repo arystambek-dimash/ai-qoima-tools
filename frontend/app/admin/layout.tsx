@@ -9,12 +9,15 @@ import {
   Wrench,
   MessageSquareText,
   Newspaper,
+  Building2,
   LogOut,
   Menu,
   X,
   Shield,
+  ExternalLink,
 } from 'lucide-react';
 import { getAdminToken, setAdminToken, clearAdminToken, verifyToken } from '@/lib/admin-api';
+import { useIsAdminSubdomain, useMainSiteUrl } from '@/lib/hooks';
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
@@ -22,6 +25,7 @@ const navItems = [
   { href: '/admin/tools', label: 'Tools', icon: Wrench },
   { href: '/admin/prompts', label: 'Prompts', icon: MessageSquareText },
   { href: '/admin/news', label: 'News', icon: Newspaper },
+  { href: '/admin/companies', label: 'Companies', icon: Building2 },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -31,12 +35,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [error, setError] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
+  const isAdminSubdomain = useIsAdminSubdomain();
+  const mainSiteUrl = useMainSiteUrl();
 
   useEffect(() => {
     checkAuth();
   }, []);
 
   const checkAuth = async () => {
+    // Check for token in URL (for cross-subdomain sync in development)
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlToken = urlParams.get('token');
+      if (urlToken) {
+        setAdminToken(urlToken);
+        // Remove token from URL for security
+        urlParams.delete('token');
+        const newUrl = urlParams.toString() 
+          ? `${window.location.pathname}?${urlParams.toString()}`
+          : window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+      }
+    }
+
     const token = getAdminToken();
     if (token) {
       const valid = await verifyToken();
@@ -65,6 +86,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     clearAdminToken();
     setIsAuthenticated(false);
     setTokenInput('');
+  };
+
+  // Get admin-aware link path
+  const getAdminLink = (href: string) => {
+    if (isAdminSubdomain) {
+      return href.replace('/admin', '') || '/';
+    }
+    return href;
+  };
+
+  // Check if path is active
+  const isPathActive = (href: string) => {
+    const normalizedPath = isAdminSubdomain ? `/admin${pathname}` : pathname;
+    return normalizedPath === href || (href !== '/admin' && normalizedPath.startsWith(href));
   };
 
   if (isLoading) {
@@ -119,9 +154,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </form>
 
             <div className="mt-6 text-center">
-              <Link href="/" className="text-sm text-gray-500 hover:text-indigo-600">
+              <a href={mainSiteUrl} className="text-sm text-gray-500 hover:text-indigo-600 inline-flex items-center gap-1">
+                <ExternalLink className="h-3 w-3" />
                 Back to main site
-              </Link>
+              </a>
             </div>
           </div>
         </div>
@@ -158,7 +194,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       >
         <div className="flex flex-col h-full">
           <div className="p-6 border-b border-gray-200">
-            <Link href="/admin" className="flex items-center gap-2">
+            <Link href={getAdminLink('/admin')} className="flex items-center gap-2">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-600">
                 <Shield className="h-6 w-6 text-white" />
               </div>
@@ -171,11 +207,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           <nav className="flex-1 p-4 space-y-1">
             {navItems.map((item) => {
-              const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href));
+              const isActive = isPathActive(item.href);
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={getAdminLink(item.href)}
                   onClick={() => setSidebarOpen(false)}
                   className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${
                     isActive
@@ -198,12 +234,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <LogOut className="h-5 w-5" />
               <span className="font-medium">Logout</span>
             </button>
-            <Link
-              href="/"
+            <a
+              href={mainSiteUrl}
               className="flex items-center gap-3 px-4 py-3 mt-1 rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-700 text-sm transition"
             >
+              <ExternalLink className="h-4 w-4" />
               Back to main site
-            </Link>
+            </a>
           </div>
         </div>
       </aside>

@@ -76,6 +76,15 @@ export interface Prompt {
   updated_at: Date;
 }
 
+export interface PromptWithTools extends Prompt {
+  tool_ids: string[];
+}
+
+export interface PromptTool {
+  prompt_id: string;
+  tool_id: string;
+}
+
 export interface ToolUpdate {
   id: string;
   tool_id: string;

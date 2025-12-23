@@ -64,7 +64,7 @@ export default function NewsEditor() {
       } else {
         await updateNews(id, payload);
       }
-      router.push('/admin/news');
+      router.push('../news');
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to save');
     } finally {
@@ -84,7 +84,7 @@ export default function NewsEditor() {
     <div>
       <div className="mb-6">
         <Link
-          href="/admin/news"
+          href="../news"
           className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 transition mb-4"
         >
           <ArrowLeft className="h-4 w-4" />

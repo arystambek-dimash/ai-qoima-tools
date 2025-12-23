@@ -29,8 +29,11 @@ async function handleNewsCollection(
   job: Job<NewsCollectionJobData>
 ): Promise<NewsCollectionResult> {
   const startTime = Date.now();
-  console.log(`[Worker] Starting news collection job ${job.id}...`);
-  console.log(`[Worker] Triggered by: ${job.data.triggeredBy} at ${job.data.triggeredAt}`);
+  console.log(`[Worker] Starting news collection job ${job.id || 'unknown'}...`);
+  
+  // Handle cases where job.data might be undefined (scheduled jobs or older format)
+  const jobData = job.data || { triggeredBy: 'scheduled', triggeredAt: new Date().toISOString() };
+  console.log(`[Worker] Triggered by: ${jobData.triggeredBy} at ${jobData.triggeredAt}`);
 
   try {
     const result = await collectNews();
@@ -38,6 +41,16 @@ async function handleNewsCollection(
 
     console.log(`[Worker] News collection completed in ${duration}ms:`, result);
     jobsProcessed++;
+
+    // Automatically trigger article generation for all news without content
+    if (result.saved > 0) {
+      console.log(`[Worker] Triggering batch article generation for ${result.saved} new news items...`);
+      const queue = await getJobQueue();
+      await queue.send(JobNames.ARTICLE_GENERATION_BATCH, {
+        limit: result.saved + 5, // Generate for new + any previously missed
+        triggeredBy: 'auto',
+      });
+    }
 
     return {
       ...result,
@@ -52,29 +65,37 @@ async function handleNewsCollection(
 async function handleArticleGeneration(
   job: Job<ArticleGenerationJobData>
 ): Promise<ArticleGenerationResult> {
-  console.log(`[Worker] Starting article generation for news ${job.data.newsId}...`);
+  const jobData = job.data || { newsId: '', triggeredBy: 'unknown' };
+  const newsId = jobData.newsId;
+  
+  if (!newsId) {
+    console.error('[Worker] Article generation job missing newsId');
+    return { newsId: '', success: false, error: 'Missing newsId' };
+  }
+  
+  console.log(`[Worker] Starting article generation for news ${newsId}...`);
 
   try {
-    const result = await generateArticleContent(job.data.newsId);
+    const result = await generateArticleContent(newsId);
     jobsProcessed++;
 
     if (result) {
-      console.log(`[Worker] Article generated successfully for ${job.data.newsId}`);
+      console.log(`[Worker] Article generated successfully for ${newsId}`);
       return {
-        newsId: job.data.newsId,
+        newsId,
         success: true,
       };
     } else {
       return {
-        newsId: job.data.newsId,
+        newsId,
         success: false,
         error: 'Generation returned null',
       };
     }
   } catch (error) {
-    console.error(`[Worker] Article generation failed for ${job.data.newsId}:`, error);
+    console.error(`[Worker] Article generation failed for ${newsId}:`, error);
     return {
-      newsId: job.data.newsId,
+      newsId,
       success: false,
       error: error instanceof Error ? error.message : String(error),
     };
@@ -84,16 +105,19 @@ async function handleArticleGeneration(
 async function handleArticleGenerationBatch(
   job: Job<ArticleGenerationBatchJobData>
 ): Promise<{ generated: number; limit: number }> {
-  console.log(`[Worker] Starting batch article generation (limit: ${job.data.limit})...`);
+  const jobData = job.data || { limit: 10, triggeredBy: 'unknown' };
+  const limit = jobData.limit || 10;
+  
+  console.log(`[Worker] Starting batch article generation (limit: ${limit})...`);
 
   try {
-    const generated = await generateMissingArticles(job.data.limit);
+    const generated = await generateMissingArticles(limit);
     jobsProcessed++;
 
-    console.log(`[Worker] Batch article generation completed: ${generated}/${job.data.limit}`);
+    console.log(`[Worker] Batch article generation completed: ${generated}/${limit}`);
     return {
       generated,
-      limit: job.data.limit,
+      limit,
     };
   } catch (error) {
     console.error(`[Worker] Batch article generation failed:`, error);

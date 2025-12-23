@@ -3,8 +3,7 @@ import { Inter } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import './globals.css';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
+import { LayoutWrapper } from '@/components/LayoutWrapper';
 
 const inter = Inter({ subsets: ['latin', 'cyrillic'] });
 
@@ -32,11 +31,9 @@ export default async function RootLayout({
           >
             Skip to main content
           </a>
-          <Header />
-          <main id="main-content" className="flex-1" tabIndex={-1}>
+          <LayoutWrapper>
             {children}
-          </main>
-          <Footer />
+          </LayoutWrapper>
         </NextIntlClientProvider>
       </body>
     </html>

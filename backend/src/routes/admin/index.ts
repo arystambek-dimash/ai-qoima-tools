@@ -6,6 +6,7 @@ import promptsAdminRouter from './prompts.js';
 import newsAdminRouter from './news.js';
 import toolUpdatesAdminRouter from './toolUpdates.js';
 import subscribersAdminRouter from './subscribers.js';
+import companiesAdminRouter from './companies.js';
 
 const router = Router();
 
@@ -18,5 +19,6 @@ router.use('/prompts', promptsAdminRouter);
 router.use('/news', newsAdminRouter);
 router.use('/tool-updates', toolUpdatesAdminRouter);
 router.use('/subscribers', subscribersAdminRouter);
+router.use('/companies', companiesAdminRouter);
 
 export default router;

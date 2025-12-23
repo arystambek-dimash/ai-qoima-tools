@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Search, FileText, Copy, Check, ChevronDown, Filter, Sparkles, X } from 'lucide-react';
+import { Search, FileText, Copy, Check, ChevronDown, Filter, Sparkles, X, ExternalLink, Tag } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
 import ToolIcon from '@/components/ToolIcon';
@@ -16,7 +16,6 @@ export default function PromptsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [expandedPrompt, setExpandedPrompt] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [isToolDropdownOpen, setIsToolDropdownOpen] = useState(false);
 
   const t = useTranslations('prompts');
   const tCommon = useTranslations('common');
@@ -31,17 +30,6 @@ export default function PromptsPage() {
       setTools(toolsRes.data);
     }).finally(() => setLoading(false));
   }, [locale]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (isToolDropdownOpen && !(e.target as Element).closest('.tool-dropdown')) {
-        setIsToolDropdownOpen(false);
-      }
-    };
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, [isToolDropdownOpen]);
 
   // Create a map of tool_id to tool for quick lookup
   const toolMap = useMemo(() => {
@@ -61,12 +49,25 @@ export default function PromptsPage() {
     return Array.from(cats).sort();
   }, [prompts]);
 
+  // Get tools that have prompts associated
+  const toolsWithPrompts = useMemo(() => {
+    const toolIds = new Set<string>();
+    prompts.forEach(p => {
+      if (p.tool_ids && Array.isArray(p.tool_ids)) {
+        p.tool_ids.forEach(id => toolIds.add(id));
+      }
+    });
+    return tools.filter(t => toolIds.has(t.id));
+  }, [prompts, tools]);
+
   // Filter prompts based on search, tool, and category
   const filteredPrompts = useMemo(() => {
     let filtered = prompts;
 
     if (selectedToolId !== 'all') {
-      filtered = filtered.filter(prompt => prompt.tool_id === selectedToolId);
+      filtered = filtered.filter(prompt => 
+        prompt.tool_ids && Array.isArray(prompt.tool_ids) && prompt.tool_ids.includes(selectedToolId)
+      );
     }
 
     if (selectedCategory !== 'all') {
@@ -84,33 +85,34 @@ export default function PromptsPage() {
     return filtered;
   }, [prompts, selectedToolId, selectedCategory, search]);
 
-  // Group prompts by tool
+  // Group prompts by their primary tool (first tool in the array)
   const groupedPrompts = useMemo(() => {
+    if (selectedToolId !== 'all') {
+      // When filtered by tool, show flat list
+      return [{ toolId: selectedToolId, tool: toolMap[selectedToolId], prompts: filteredPrompts }];
+    }
+
     const groups: Record<string, { tool: Tool | null; prompts: Prompt[] }> = {};
 
     filteredPrompts.forEach(prompt => {
-      const toolId = prompt.tool_id || 'general';
-      if (!groups[toolId]) {
-        groups[toolId] = {
-          tool: prompt.tool_id ? toolMap[prompt.tool_id] || null : null,
+      const primaryToolId = prompt.tool_ids && prompt.tool_ids.length > 0 ? prompt.tool_ids[0] : 'general';
+      if (!groups[primaryToolId]) {
+        groups[primaryToolId] = {
+          tool: primaryToolId !== 'general' ? toolMap[primaryToolId] || null : null,
           prompts: []
         };
       }
-      groups[toolId].prompts.push(prompt);
+      groups[primaryToolId].prompts.push(prompt);
     });
 
-    return Object.entries(groups).sort(([aId, a], [bId, b]) => {
-      if (aId === 'general') return 1;
-      if (bId === 'general') return -1;
-      return (a.tool?.name || '').localeCompare(b.tool?.name || '');
-    });
-  }, [filteredPrompts, toolMap]);
-
-  // Get tools that have prompts
-  const toolsWithPrompts = useMemo(() => {
-    const toolIds = new Set(prompts.map(p => p.tool_id).filter(Boolean));
-    return tools.filter(t => toolIds.has(t.id));
-  }, [prompts, tools]);
+    return Object.entries(groups)
+      .map(([toolId, data]) => ({ toolId, ...data }))
+      .sort((a, b) => {
+        if (a.toolId === 'general') return 1;
+        if (b.toolId === 'general') return -1;
+        return (a.tool?.name || '').localeCompare(b.tool?.name || '');
+      });
+  }, [filteredPrompts, toolMap, selectedToolId]);
 
   const selectedTool = selectedToolId !== 'all' ? toolMap[selectedToolId] : null;
 
@@ -128,197 +130,203 @@ export default function PromptsPage() {
 
   const hasActiveFilters = selectedToolId !== 'all' || selectedCategory !== 'all' || search;
 
+  // Get tools for a prompt
+  const getPromptTools = (prompt: Prompt): Tool[] => {
+    if (!prompt.tool_ids || !Array.isArray(prompt.tool_ids)) return [];
+    return prompt.tool_ids.map(id => toolMap[id]).filter(Boolean);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 p-4 mb-4 shadow-lg shadow-indigo-200">
-            <FileText className="h-8 w-8 text-white" />
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4 mb-6 shadow-xl shadow-indigo-200/50">
+            <FileText className="h-10 w-10 text-white" />
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 sm:text-5xl">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 via-indigo-900 to-purple-900 bg-clip-text text-transparent sm:text-5xl">
             {t('title')}
           </h1>
-          <p className="mt-4 text-lg text-gray-500 max-w-2xl mx-auto">
+          <p className="mt-4 text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
             {t('subtitle')}
           </p>
         </div>
 
-        {/* Filters Section */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-8 shadow-sm">
-          <div className="flex flex-col lg:flex-row gap-4">
-            {/* Tool Selector with Icons */}
-            <div className="relative tool-dropdown flex-1">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                <Filter className="inline h-4 w-4 mr-1" />
-                {t('selectTool')}
-              </label>
-              <button
-                onClick={() => setIsToolDropdownOpen(!isToolDropdownOpen)}
-                className="w-full flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left hover:border-indigo-300 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 transition-all"
-              >
-                <div className="flex items-center gap-3">
-                  {selectedTool ? (
-                    <>
-                      <ToolIcon slug={selectedTool.slug} name={selectedTool.name} size="sm" />
-                      <span className="font-medium text-gray-900">{selectedTool.name}</span>
-                    </>
-                  ) : (
-                    <>
-                      <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
-                        <Sparkles className="h-3.5 w-3.5 text-white" />
-                      </div>
-                      <span className="font-medium text-gray-900">{t('allTools')}</span>
-                    </>
-                  )}
-                  <span className="text-sm text-gray-400">
-                    ({selectedToolId === 'all' ? prompts.length : prompts.filter(p => p.tool_id === selectedToolId).length} {tCommon('prompts').toLowerCase()})
-                  </span>
-                </div>
-                <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${isToolDropdownOpen ? 'rotate-180' : ''}`} />
-              </button>
-
-              {/* Dropdown Menu */}
-              {isToolDropdownOpen && (
-                <div className="absolute z-50 mt-2 w-full rounded-xl border border-gray-200 bg-white shadow-xl overflow-hidden">
-                  <div className="max-h-80 overflow-y-auto">
-                    {/* All Tools Option */}
-                    <button
-                      onClick={() => { setSelectedToolId('all'); setIsToolDropdownOpen(false); }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-indigo-50 transition-colors ${selectedToolId === 'all' ? 'bg-indigo-50' : ''}`}
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
-                        <Sparkles className="h-4 w-4 text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-900">{t('allTools')}</div>
-                        <div className="text-sm text-gray-500">{prompts.length} {tCommon('prompts').toLowerCase()}</div>
-                      </div>
-                      {selectedToolId === 'all' && (
-                        <Check className="h-5 w-5 text-indigo-600" />
-                      )}
-                    </button>
-
-                    <div className="border-t border-gray-100" />
-
-                    {/* Tool Options */}
-                    {toolsWithPrompts.map(tool => {
-                      const count = prompts.filter(p => p.tool_id === tool.id).length;
-                      return (
-                        <button
-                          key={tool.id}
-                          onClick={() => { setSelectedToolId(tool.id); setIsToolDropdownOpen(false); }}
-                          className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-indigo-50 transition-colors ${selectedToolId === tool.id ? 'bg-indigo-50' : ''}`}
-                        >
-                          <ToolIcon slug={tool.slug} name={tool.name} size="sm" />
-                          <div className="flex-1">
-                            <div className="font-medium text-gray-900">{tool.name}</div>
-                            <div className="text-sm text-gray-500">{count} {tCommon('prompts').toLowerCase()}</div>
-                          </div>
-                          {selectedToolId === tool.id && (
-                            <Check className="h-5 w-5 text-indigo-600" />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Category Filter */}
-            <div className="flex-1">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                {t('category')}
-              </label>
-              <div className="relative">
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full appearance-none rounded-xl border border-gray-200 bg-white px-4 py-3 pr-10 font-medium text-gray-900 hover:border-indigo-300 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 transition-all"
+        {/* Filters Section - Redesigned */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-3xl border border-gray-100 p-6 mb-8 shadow-xl shadow-gray-100/50">
+          <div className="flex flex-col gap-6">
+            {/* Tool Filter - Horizontal Pills */}
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <Filter className="h-4 w-4 text-indigo-600" />
+                <span className="text-sm font-semibold text-gray-700">{t('selectTool')}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {/* All Tools Button */}
+                <button
+                  onClick={() => setSelectedToolId('all')}
+                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all duration-200 ${
+                    selectedToolId === 'all'
+                      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-200'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
                 >
-                  <option value="all">{t('allCategories')}</option>
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
+                  <Sparkles className="h-4 w-4" />
+                  {t('allTools')}
+                  <span className={`ml-1 px-2 py-0.5 rounded-full text-xs ${
+                    selectedToolId === 'all' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'
+                  }`}>
+                    {prompts.length}
+                  </span>
+                </button>
+
+                {/* Tool Pills */}
+                {toolsWithPrompts.map(tool => {
+                  const count = prompts.filter(p => 
+                    p.tool_ids && Array.isArray(p.tool_ids) && p.tool_ids.includes(tool.id)
+                  ).length;
+                  const isSelected = selectedToolId === tool.id;
+                  
+                  return (
+                    <button
+                      key={tool.id}
+                      onClick={() => setSelectedToolId(tool.id)}
+                      className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all duration-200 ${
+                        isSelected
+                          ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-200'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <ToolIcon slug={tool.slug} name={tool.name} size="sm" className="w-5 h-5" />
+                      {tool.name}
+                      <span className={`ml-1 px-2 py-0.5 rounded-full text-xs ${
+                        isSelected ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Search */}
-            <div className="flex-1">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                {tCommon('search')}
-              </label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder={t('searchPrompts')}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 font-medium text-gray-900 placeholder-gray-400 hover:border-indigo-300 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 transition-all"
-                />
+            {/* Category and Search Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Category Filter */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <Tag className="inline h-4 w-4 mr-1" />
+                  {t('category')}
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="w-full appearance-none rounded-xl border border-gray-200 bg-white px-4 py-3 pr-10 font-medium text-gray-900 hover:border-indigo-300 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer"
+                  >
+                    <option value="all">{t('allCategories')}</option>
+                    {categories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Search */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <Search className="inline h-4 w-4 mr-1" />
+                  {tCommon('search')}
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder={t('searchPrompts')}
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-12 pr-4 font-medium text-gray-900 placeholder-gray-400 hover:border-indigo-300 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
+                  />
+                  {search && (
+                    <button
+                      onClick={() => setSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full"
+                    >
+                      <X className="h-4 w-4 text-gray-400" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
+
+            {/* Active Filters & Clear */}
+            {hasActiveFilters && (
+              <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm text-gray-500">{t('activeFilters')}</span>
+                  {selectedTool && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-3 py-1.5 text-sm font-medium text-indigo-700">
+                      <ToolIcon slug={selectedTool.slug} name={selectedTool.name} size="sm" className="w-4 h-4" />
+                      {selectedTool.name}
+                      <button onClick={() => setSelectedToolId('all')} className="ml-1 hover:text-indigo-900">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                  {selectedCategory !== 'all' && (
+                    <span className="inline-flex items-center rounded-full bg-purple-100 px-3 py-1.5 text-sm font-medium text-purple-700">
+                      {selectedCategory}
+                      <button onClick={() => setSelectedCategory('all')} className="ml-1.5 hover:text-purple-900">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                  {search && (
+                    <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700">
+                      &quot;{search}&quot;
+                      <button onClick={() => setSearch('')} className="ml-1.5 hover:text-gray-900">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={clearFilters}
+                  className="inline-flex items-center gap-1 text-sm font-medium text-red-600 hover:text-red-700 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                  {tCommon('clearAll')}
+                </button>
+              </div>
+            )}
           </div>
-
-          {/* Active Filters & Clear */}
-          {hasActiveFilters && (
-            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm text-gray-500">{t('activeFilters')}</span>
-                {selectedTool && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-700">
-                    <ToolIcon slug={selectedTool.slug} name={selectedTool.name} size="sm" className="w-4 h-4" />
-                    {selectedTool.name}
-                  </span>
-                )}
-                {selectedCategory !== 'all' && (
-                  <span className="inline-flex items-center rounded-full bg-purple-100 px-3 py-1 text-sm font-medium text-purple-700">
-                    {selectedCategory}
-                  </span>
-                )}
-                {search && (
-                  <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-700">
-                    "{search}"
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={clearFilters}
-                className="inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-red-600 transition-colors"
-              >
-                <X className="h-4 w-4" />
-                {tCommon('clearAll')}
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Results Count */}
         <div className="mb-6 flex items-center justify-between">
-          <p className="text-gray-600">
+          <p className="text-gray-600 font-medium">
             {t('promptsFound', { count: filteredPrompts.length })}
           </p>
         </div>
 
         {/* Loading State */}
         {loading ? (
-          <div className="text-center py-20">
-            <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-indigo-600 border-r-transparent" />
-            <p className="mt-4 text-gray-500">{tCommon('loading')}</p>
+          <div className="text-center py-24">
+            <div className="inline-block h-14 w-14 animate-spin rounded-full border-4 border-indigo-600 border-r-transparent" />
+            <p className="mt-6 text-gray-500 font-medium">{tCommon('loading')}</p>
           </div>
         ) : filteredPrompts.length === 0 ? (
           /* Empty State */
-          <div className="text-center py-20 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-            <Search className="mx-auto h-16 w-16 text-gray-300" />
-            <p className="mt-4 text-xl font-medium text-gray-500">{t('noPrompts')}</p>
-            <p className="mt-2 text-gray-400">{tCommon('noResults')}</p>
+          <div className="text-center py-24 bg-gradient-to-br from-gray-50 to-indigo-50/30 rounded-3xl border-2 border-dashed border-gray-200">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gray-100 mb-6">
+              <Search className="h-10 w-10 text-gray-400" />
+            </div>
+            <p className="text-2xl font-semibold text-gray-600">{t('noPrompts')}</p>
+            <p className="mt-2 text-gray-400 max-w-md mx-auto">{tCommon('noResults')}</p>
             <button
               onClick={clearFilters}
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-white font-medium hover:bg-indigo-700 transition-colors"
+              className="mt-8 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-white font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
             >
               <X className="h-4 w-4" />
               {tCommon('clearAll')}
@@ -326,113 +334,149 @@ export default function PromptsPage() {
           </div>
         ) : (
           /* Prompts Grid */
-          <div className="space-y-10">
-            {groupedPrompts.map(([toolId, { tool, prompts: toolPrompts }]) => (
+          <div className="space-y-12">
+            {groupedPrompts.map(({ toolId, tool, prompts: toolPrompts }) => (
               <div key={toolId}>
                 {/* Tool Section Header */}
-                {(selectedToolId === 'all' || toolId === 'general') && (
+                {selectedToolId === 'all' && (
                   <div className="flex items-center gap-4 mb-6">
                     {tool ? (
                       <>
-                        <ToolIcon slug={tool.slug} name={tool.name} size="lg" />
+                        <div className="p-2 rounded-xl bg-gradient-to-br from-gray-100 to-gray-50 border border-gray-200">
+                          <ToolIcon slug={tool.slug} name={tool.name} size="lg" />
+                        </div>
                         <div className="flex-1">
                           <h2 className="text-xl font-bold text-gray-900">{tool.name}</h2>
                           <p className="text-sm text-gray-500">{t('promptsOptimized', { count: toolPrompts.length, tool: tool.name })}</p>
                         </div>
                         <Link
                           href={`/tools/${tool.slug}`}
-                          className="hidden sm:inline-flex items-center gap-1 rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-indigo-100 hover:text-indigo-700 transition-colors"
+                          className="hidden sm:inline-flex items-center gap-2 rounded-xl bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-indigo-100 hover:text-indigo-700 transition-all"
                         >
                           {tCommon('viewDetails')}
+                          <ExternalLink className="h-4 w-4" />
                         </Link>
                       </>
                     ) : (
-                      <div>
-                        <h2 className="text-xl font-bold text-gray-900">General Prompts</h2>
-                        <p className="text-sm text-gray-500">{toolPrompts.length} prompts for any AI tool</p>
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-gradient-to-br from-purple-100 to-indigo-100 border border-purple-200">
+                          <Sparkles className="h-8 w-8 text-purple-600" />
+                        </div>
+                        <div>
+                          <h2 className="text-xl font-bold text-gray-900">General Prompts</h2>
+                          <p className="text-sm text-gray-500">{toolPrompts.length} prompts for any AI tool</p>
+                        </div>
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Prompts Cards Grid */}
-                <div className="grid gap-4 sm:grid-cols-2">
+                {/* Prompts Cards */}
+                <div className="grid gap-4 md:grid-cols-2">
                   {toolPrompts.map(prompt => {
                     const isExpanded = expandedPrompt === prompt.id;
                     const isCopied = copiedId === prompt.id;
-                    const promptTool = prompt.tool_id ? toolMap[prompt.tool_id] : null;
+                    const promptToolsList = getPromptTools(prompt);
 
                     return (
                       <div
                         key={prompt.id}
-                        className={`group bg-white rounded-xl border transition-all duration-200 ${
+                        className={`group bg-white rounded-2xl border transition-all duration-300 ${
                           isExpanded
-                            ? 'border-indigo-300 shadow-lg shadow-indigo-100 col-span-full'
-                            : 'border-gray-200 hover:border-indigo-200 hover:shadow-md'
+                            ? 'border-indigo-300 shadow-2xl shadow-indigo-100/50 md:col-span-2 ring-2 ring-indigo-100'
+                            : 'border-gray-200 hover:border-indigo-200 hover:shadow-xl hover:shadow-gray-100/50'
                         }`}
                       >
-                        {/* Card Header */}
-                        <div className="p-5">
-                          <div className="flex items-start gap-4">
-                            {/* Tool Icon (only when viewing all tools and tool is selected) */}
-                            {selectedToolId === 'all' && promptTool && (
-                              <ToolIcon slug={promptTool.slug} name={promptTool.name} size="sm" className="mt-0.5 flex-shrink-0" />
-                            )}
-
+                        <div className="p-6">
+                          {/* Header Row */}
+                          <div className="flex items-start justify-between gap-4 mb-4">
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <h3 className="font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">
-                                    {prompt.title}
-                                  </h3>
-                                  {prompt.category && (
-                                    <span className="inline-block mt-1.5 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
-                                      {prompt.category}
-                                    </span>
-                                  )}
-                                </div>
-                                <button
-                                  onClick={() => handleCopy(prompt.id, prompt.prompt_text)}
-                                  className={`flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${
-                                    isCopied
-                                      ? 'bg-green-500 text-white'
-                                      : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm hover:shadow-md'
-                                  }`}
-                                >
-                                  {isCopied ? (
-                                    <>
-                                      <Check className="h-4 w-4" />
-                                      {tCommon('copied')}
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Copy className="h-4 w-4" />
-                                      {tCommon('copy')}
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-
-                              {/* Preview or Full Text */}
-                              <button
-                                onClick={() => setExpandedPrompt(isExpanded ? null : prompt.id)}
-                                className="mt-3 text-left w-full"
-                              >
-                                {isExpanded ? (
-                                  <pre className="whitespace-pre-wrap text-sm text-gray-700 font-mono leading-relaxed bg-gray-50 rounded-lg p-4 border border-gray-100">
-                                    {prompt.prompt_text}
-                                  </pre>
-                                ) : (
-                                  <p className="text-sm text-gray-500 line-clamp-2">
-                                    {prompt.prompt_text.slice(0, 150)}...
-                                  </p>
+                              <h3 className="text-lg font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">
+                                {prompt.title}
+                              </h3>
+                              
+                              {/* Meta: Category + Tools */}
+                              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                {prompt.category && (
+                                  <span className="inline-flex items-center rounded-lg bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700 border border-purple-100">
+                                    <Tag className="h-3 w-3 mr-1" />
+                                    {prompt.category}
+                                  </span>
                                 )}
-                                <span className="inline-block mt-2 text-sm font-medium text-indigo-600 hover:text-indigo-700">
-                                  {isExpanded ? t('hidePrompt') : t('showFullPrompt')}
-                                </span>
-                              </button>
+                                {promptToolsList.length > 0 && (
+                                  <div className="flex items-center gap-1">
+                                    {promptToolsList.slice(0, 3).map(toolItem => (
+                                      <Link
+                                        key={toolItem.id}
+                                        href={`/tools/${toolItem.slug}`}
+                                        className="inline-flex items-center gap-1 rounded-lg bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-indigo-50 hover:text-indigo-700 border border-gray-100 transition-colors"
+                                        title={toolItem.name}
+                                      >
+                                        <ToolIcon slug={toolItem.slug} name={toolItem.name} size="sm" className="w-3.5 h-3.5" />
+                                        <span className="hidden sm:inline">{toolItem.name}</span>
+                                      </Link>
+                                    ))}
+                                    {promptToolsList.length > 3 && (
+                                      <span className="text-xs text-gray-400 ml-1">+{promptToolsList.length - 3}</span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
+                            
+                            {/* Copy Button */}
+                            <button
+                              onClick={() => handleCopy(prompt.id, prompt.prompt_text)}
+                              className={`flex-shrink-0 inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 ${
+                                isCopied
+                                  ? 'bg-green-500 text-white shadow-lg shadow-green-200'
+                                  : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 shadow-lg shadow-indigo-200/50 hover:shadow-xl hover:shadow-indigo-200/70'
+                              }`}
+                            >
+                              {isCopied ? (
+                                <>
+                                  <Check className="h-4 w-4" />
+                                  {tCommon('copied')}
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="h-4 w-4" />
+                                  {tCommon('copy')}
+                                </>
+                              )}
+                            </button>
                           </div>
+
+                          {/* Preview or Full Text */}
+                          <button
+                            onClick={() => setExpandedPrompt(isExpanded ? null : prompt.id)}
+                            className="mt-2 text-left w-full"
+                          >
+                            {isExpanded ? (
+                              <div className="rounded-xl bg-gradient-to-br from-gray-50 to-indigo-50/30 p-5 border border-gray-100">
+                                <pre className="whitespace-pre-wrap text-sm text-gray-700 font-mono leading-relaxed">
+                                  {prompt.prompt_text}
+                                </pre>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-gray-500 line-clamp-2 leading-relaxed">
+                                {prompt.prompt_text.slice(0, 180)}...
+                              </p>
+                            )}
+                            <span className="inline-flex items-center gap-1 mt-3 text-sm font-semibold text-indigo-600 hover:text-indigo-700 transition-colors">
+                              {isExpanded ? (
+                                <>
+                                  <ChevronDown className="h-4 w-4 rotate-180" />
+                                  {t('hidePrompt')}
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="h-4 w-4" />
+                                  {t('showFullPrompt')}
+                                </>
+                              )}
+                            </span>
+                          </button>
                         </div>
                       </div>
                     );
@@ -444,34 +488,20 @@ export default function PromptsPage() {
         )}
 
         {/* Help Section */}
-        <div className="mt-16 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 p-8 text-white">
-          <div className="max-w-3xl mx-auto text-center">
-            <h3 className="text-2xl font-bold mb-4">{t('howToUse')}</h3>
-            <div className="grid sm:grid-cols-4 gap-6 mt-8">
-              <div className="text-center">
-                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
-                  <span className="text-xl font-bold">1</span>
+        <div className="mt-20 rounded-3xl bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 p-10 text-white shadow-2xl shadow-indigo-200/50 overflow-hidden relative">
+          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0aDR2NGgtNHpNMjAgMjBoNHY0aC00eiIvPjwvZz48L2c+PC9zdmc+')] opacity-30" />
+          <div className="max-w-4xl mx-auto text-center relative">
+            <h3 className="text-3xl font-bold mb-4">{t('howToUse')}</h3>
+            <p className="text-indigo-100 mb-10 text-lg">Master the art of prompt engineering with these simple steps</p>
+            <div className="grid sm:grid-cols-4 gap-8">
+              {[1, 2, 3, 4].map((step) => (
+                <div key={step} className="text-center group">
+                  <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center mx-auto mb-4 group-hover:bg-white/20 transition-colors border border-white/10">
+                    <span className="text-2xl font-bold">{step}</span>
+                  </div>
+                  <p className="text-sm text-indigo-100 leading-relaxed" dangerouslySetInnerHTML={{ __html: t.raw(`step${step}`) }} />
                 </div>
-                <p className="text-sm text-indigo-100" dangerouslySetInnerHTML={{ __html: t.raw('step1') }} />
-              </div>
-              <div className="text-center">
-                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
-                  <span className="text-xl font-bold">2</span>
-                </div>
-                <p className="text-sm text-indigo-100">{t('step2')}</p>
-              </div>
-              <div className="text-center">
-                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
-                  <span className="text-xl font-bold">3</span>
-                </div>
-                <p className="text-sm text-indigo-100">{t('step3')}</p>
-              </div>
-              <div className="text-center">
-                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
-                  <span className="text-xl font-bold">4</span>
-                </div>
-                <p className="text-sm text-indigo-100">{t('step4')}</p>
-              </div>
+              ))}
             </div>
           </div>
         </div>

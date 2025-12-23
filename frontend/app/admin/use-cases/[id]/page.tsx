@@ -71,7 +71,7 @@ export default function UseCaseEditor() {
           audience: form.audience || undefined,
         });
       }
-      router.push('/admin/use-cases');
+      router.push('../use-cases');
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to save');
     } finally {
@@ -101,7 +101,7 @@ export default function UseCaseEditor() {
     <div>
       <div className="mb-6">
         <Link
-          href="/admin/use-cases"
+          href="../use-cases"
           className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 transition mb-4"
         >
           <ArrowLeft className="h-4 w-4" />

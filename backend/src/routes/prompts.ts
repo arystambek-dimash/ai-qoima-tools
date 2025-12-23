@@ -12,6 +12,11 @@ import {
 
 const router = Router();
 
+// Extended Prompt type with tools
+interface PromptWithTools extends Prompt {
+  tool_ids: string[];
+}
+
 // GET /api/v1/prompts
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -27,34 +32,44 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
     if (search) {
       params.push(`%${search}%`);
-      conditions.push(`(title ILIKE $${params.length} OR prompt_text ILIKE $${params.length})`);
+      conditions.push(`(p.title ILIKE $${params.length} OR p.prompt_text ILIKE $${params.length})`);
     }
 
     if (category) {
       params.push(category);
-      conditions.push(`category = $${params.length}`);
+      conditions.push(`p.category = $${params.length}`);
     }
 
     if (useCaseId) {
       params.push(useCaseId);
-      conditions.push(`use_case_id = $${params.length}`);
+      conditions.push(`p.use_case_id = $${params.length}`);
     }
 
     if (toolId) {
       params.push(toolId);
-      conditions.push(`tool_id = $${params.length}`);
+      conditions.push(`EXISTS (SELECT 1 FROM prompt_tools pt WHERE pt.prompt_id = p.id AND pt.tool_id = $${params.length})`);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const countResult = await queryOne<{ count: string }>(
-      `SELECT COUNT(*) as count FROM prompts ${whereClause}`,
+      `SELECT COUNT(*) as count FROM prompts p ${whereClause}`,
       params
     );
     const total = parseInt(countResult?.count || '0', 10);
 
-    const prompts = await query<Prompt>(
-      `SELECT * FROM prompts ${whereClause} ORDER BY title ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    // Get prompts with their associated tool_ids
+    const prompts = await query<PromptWithTools>(
+      `SELECT 
+        p.*,
+        COALESCE(
+          (SELECT array_agg(pt.tool_id) FROM prompt_tools pt WHERE pt.prompt_id = p.id),
+          '{}'::uuid[]
+        ) as tool_ids
+       FROM prompts p 
+       ${whereClause} 
+       ORDER BY p.title ASC 
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, limit, offset]
     );
 
@@ -69,7 +84,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       translatedPrompts = applyBatchTranslations(prompts, translationsMap);
     }
 
-    const response: ApiResponse<Prompt[]> = {
+    const response: ApiResponse<PromptWithTools[]> = {
       data: translatedPrompts,
       meta: {
         pagination: getPaginationMeta(total, { page, limit, offset }),
@@ -104,8 +119,15 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
     const locale = (req.query.locale as string) || 'en';
 
-    const prompt = await queryOne<Prompt>(
-      `SELECT * FROM prompts WHERE id = $1`,
+    const prompt = await queryOne<PromptWithTools>(
+      `SELECT 
+        p.*,
+        COALESCE(
+          (SELECT array_agg(pt.tool_id) FROM prompt_tools pt WHERE pt.prompt_id = p.id),
+          '{}'::uuid[]
+        ) as tool_ids
+       FROM prompts p 
+       WHERE p.id = $1`,
       [id]
     );
 
@@ -120,7 +142,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
       translatedPrompt = applyTranslations(prompt, translations);
     }
 
-    const response: ApiResponse<Prompt> = { data: translatedPrompt };
+    const response: ApiResponse<PromptWithTools> = { data: translatedPrompt };
     res.json(response);
   } catch (error) {
     next(error);
@@ -133,8 +155,15 @@ router.get('/slug/:slug', async (req: Request, res: Response, next: NextFunction
     const { slug } = req.params;
     const locale = (req.query.locale as string) || 'en';
 
-    const prompt = await queryOne<Prompt>(
-      `SELECT * FROM prompts WHERE slug = $1`,
+    const prompt = await queryOne<PromptWithTools>(
+      `SELECT 
+        p.*,
+        COALESCE(
+          (SELECT array_agg(pt.tool_id) FROM prompt_tools pt WHERE pt.prompt_id = p.id),
+          '{}'::uuid[]
+        ) as tool_ids
+       FROM prompts p 
+       WHERE p.slug = $1`,
       [slug]
     );
 
@@ -149,7 +178,7 @@ router.get('/slug/:slug', async (req: Request, res: Response, next: NextFunction
       translatedPrompt = applyTranslations(prompt, translations);
     }
 
-    const response: ApiResponse<Prompt> = { data: translatedPrompt };
+    const response: ApiResponse<PromptWithTools> = { data: translatedPrompt };
     res.json(response);
   } catch (error) {
     next(error);
