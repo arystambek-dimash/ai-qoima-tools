@@ -88,13 +88,18 @@ export interface AssistantResponse {
     recommended_tools: { id: string; slug: string; name: string }[];
 }
 
-async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
+async function fetchApi<T>(endpoint: string, options?: RequestInit & { cache?: RequestCache; revalidate?: number }): Promise<T> {
+    const { revalidate, ...fetchOptions } = options || {};
+
     const res = await fetch(`${API_BASE}${endpoint}`, {
-        ...options,
+        ...fetchOptions,
         headers: {
             'Content-Type': 'application/json',
-            ...options?.headers,
+            ...fetchOptions?.headers,
         },
+        // Add caching for GET requests
+        cache: fetchOptions?.cache || (fetchOptions?.method ? undefined : 'force-cache'),
+        next: revalidate !== undefined ? { revalidate } : { revalidate: 60 }, // Cache for 60 seconds by default
     });
 
     if (!res.ok) {

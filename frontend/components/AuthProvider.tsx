@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { User, verifySession, logout as authLogout, isLoggedIn, getStoredUser } from '@/lib/auth';
 import { useIsAdminSubdomain } from '@/lib/hooks';
@@ -37,7 +37,13 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUser] = useState<User | null>(null);
+  // Initialize from localStorage immediately to prevent flash
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window !== 'undefined') {
+      return getStoredUser();
+    }
+    return null;
+  });
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
@@ -48,9 +54,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const isAdminRoute = pathname.startsWith(ADMIN_PREFIX) || isAdminSubdomain;
   const isProtectedRoute = !isAdminRoute && PROTECTED_PREFIXES.some(prefix => pathname.startsWith(prefix));
 
+  const refreshUser = useCallback(async () => {
+    const storedUser = getStoredUser();
+    if (storedUser) {
+      setUser(storedUser);
+    }
+    // Verify with server in background
+    const verifiedUser = await verifySession();
+    if (verifiedUser) {
+      setUser(verifiedUser);
+    } else if (!storedUser) {
+      setUser(null);
+    }
+  }, []);
+
   useEffect(() => {
     checkAuth();
-  }, []);
+
+    // Listen for storage changes (login/logout from other tabs or same tab)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'user_data' || e.key === 'user_token') {
+        refreshUser();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [refreshUser]);
+
+  // Also check auth when pathname changes (handles navigation after login)
+  useEffect(() => {
+    const storedUser = getStoredUser();
+    if (storedUser && !user) {
+      setUser(storedUser);
+    }
+  }, [pathname, user]);
 
   const checkAuth = async () => {
     // Skip auth check for admin routes (handled by admin layout)
@@ -61,25 +99,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Check for existing session
     if (isLoggedIn()) {
-      // Try to verify with server
+      // Get stored user immediately
+      const storedUser = getStoredUser();
+      if (storedUser) {
+        setUser(storedUser);
+      }
+      // Verify with server in background
       const verifiedUser = await verifySession();
       if (verifiedUser) {
         setUser(verifiedUser);
-      } else {
-        // Session invalid, check if we have stored user data
-        const storedUser = getStoredUser();
-        if (storedUser) {
-          setUser(storedUser);
-        }
       }
     }
 
     setLoading(false);
-  };
-
-  const refreshUser = async () => {
-    const verifiedUser = await verifySession();
-    setUser(verifiedUser);
   };
 
   const logout = () => {

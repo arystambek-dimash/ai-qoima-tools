@@ -47,9 +47,9 @@ export default function LoginPage() {
       if (result.success && result.user) {
         setCompanyName(result.user.company?.name || '');
         setStep('success');
-        // Redirect after short delay
+        // Redirect after short delay - use window.location for full page reload to update auth state
         setTimeout(() => {
-          router.push('/');
+          window.location.href = '/';
         }, 1500);
       } else {
         setStep('error');
