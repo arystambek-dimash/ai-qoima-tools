@@ -6,7 +6,7 @@
 set -e
 
 # Configuration
-DOMAINS=("qoima.com.kz" "admin.qoima.com.kz" "api.qoima.com.kz")
+DOMAINS=("qoima.com.kz" "api.qoima.com.kz")
 EMAIL="your-email@example.com"  # Replace with your email
 STAGING=0  # Set to 1 for testing (to avoid rate limits)
 
