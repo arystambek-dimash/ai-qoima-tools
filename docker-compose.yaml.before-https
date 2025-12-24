@@ -8,9 +8,9 @@ services:
     depends_on:
       - backend
     environment:
-      - NEXT_PUBLIC_API_URL=https://api.qoima.com.kz/api/v1
+      - NEXT_PUBLIC_API_URL=http://159.89.203.82:8000/api/v1
       - INTERNAL_API_URL=http://backend:8000/api/v1
-      - NEXT_PUBLIC_MAIN_DOMAIN=qoima.com.kz
+      - NEXT_PUBLIC_MAIN_DOMAIN=159.89.203.82
 
   postgres:
     image: postgres:16
@@ -106,19 +106,8 @@ services:
     networks:
       - qoima-ai-tools
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./certbot/www:/var/www/certbot
-      - ./certbot/conf:/etc/letsencrypt
+      - "8080:80"
     restart: unless-stopped
-
-  certbot:
-    image: certbot/certbot
-    container_name: qoima-ai-tools-certbot
-    volumes:
-      - ./certbot/www:/var/www/certbot
-      - ./certbot/conf:/etc/letsencrypt
 
 networks:
   qoima-ai-tools:

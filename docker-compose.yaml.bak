@@ -5,13 +5,14 @@ services:
       dockerfile: Dockerfile
     networks:
       - qoima-ai-tools
+    ports:
+      - "3000:3000"
     depends_on:
       - backend
     environment:
-      - NEXT_PUBLIC_API_URL=https://api.qoima.com.kz/api/v1
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
       - INTERNAL_API_URL=http://backend:8000/api/v1
-      - NEXT_PUBLIC_MAIN_DOMAIN=qoima.com.kz
-
+      - NEXT_PUBLIC_MAIN_DOMAIN=localhost
   postgres:
     image: postgres:16
     container_name: qoima-ai-took-navigator-postgres-1
@@ -50,6 +51,7 @@ services:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - PORT=8000
+    # Resource limits
     deploy:
       resources:
         limits:
@@ -69,7 +71,7 @@ services:
     networks:
       - qoima-ai-tools
     ports:
-      - "3002:3002"
+      - "3002:3002"  # Worker health check port
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,46 +81,24 @@ services:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - WORKER_PORT=3002
+    # Resource limits for separate CPU allocation
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 512M
+          cpus: '1.0'      # Limit to 1 CPU core
+          memory: 512M     # Limit memory to 512MB
         reservations:
-          cpus: '0.5'
-          memory: 256M
+          cpus: '0.5'      # Reserve at least 0.5 CPU
+          memory: 256M     # Reserve at least 256MB
+    # Health check for container orchestration
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3002/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    # Restart policy
     restart: unless-stopped
-
-  nginx:
-    build:
-      context: ./nginx
-      dockerfile: Dockerfile
-    container_name: qoima-ai-tools-nginx
-    depends_on:
-      - frontend
-      - backend
-    networks:
-      - qoima-ai-tools
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./certbot/www:/var/www/certbot
-      - ./certbot/conf:/etc/letsencrypt
-    restart: unless-stopped
-
-  certbot:
-    image: certbot/certbot
-    container_name: qoima-ai-tools-certbot
-    volumes:
-      - ./certbot/www:/var/www/certbot
-      - ./certbot/conf:/etc/letsencrypt
 
 networks:
   qoima-ai-tools:
