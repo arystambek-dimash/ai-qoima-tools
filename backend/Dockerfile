@@ -1,13 +1,34 @@
-FROM node:25-alpine
+# Build stage
+FROM node:20-alpine AS builder
 
-WORKDIR /usr/src/app
+WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm install
+RUN npm ci
 
 COPY . .
 
+RUN npm run build
+
+# Production stage
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Copy package files and install production deps only
+COPY package*.json ./
+RUN npm ci --only=production && npm cache clean --force
+
+# Copy built files
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/migrations ./migrations
+
+# Copy env file if exists (will be overridden by docker-compose)
+COPY .env* ./
+
 EXPOSE 8000
 
-CMD ["npm", "run", "dev"]
+CMD ["node", "dist/index.js"]
