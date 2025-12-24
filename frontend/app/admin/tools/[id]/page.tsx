@@ -45,7 +45,10 @@ export default function ToolEditor() {
         categories: data.categories || [],
         limitations: data.limitations || '',
         external_url: data.external_url || '',
-        badges: data.badges || { popular: false, free_tier: false },
+        badges: {
+          popular: data.badges?.popular ?? false,
+          free_tier: data.badges?.free_tier ?? false
+        },
       });
     } catch (error) {
       console.error('Failed to load tool:', error);
