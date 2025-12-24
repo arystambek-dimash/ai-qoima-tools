@@ -33,6 +33,10 @@ const allowedOrigins = [
     process.env.FRONTEND_URL,
     'http://localhost:3000',
     'http://admin.localhost:3000',
+    "https://qoima.com.kz",
+    "https://admin.qoima.com.kz",
+    "http://qoima.com.kz",
+    "http://admin.qoima.com.kz",
 ].filter(Boolean) as string[];
 
 app.use(cors({
