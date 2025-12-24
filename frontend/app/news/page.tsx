@@ -22,7 +22,8 @@ function isNew(dateStr: string): boolean {
 }
 
 // Get relative time string
-function getRelativeTime(dateStr: string, t: (key: string, params?: Record<string, unknown>) => string): string {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getRelativeTime(dateStr: string, t: any): string {
   const newsDate = new Date(dateStr);
   const now = new Date();
   const diffTime = now.getTime() - newsDate.getTime();

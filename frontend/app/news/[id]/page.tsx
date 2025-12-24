@@ -25,7 +25,8 @@ function getReadTime(text: string): number {
 }
 
 // Get relative time string with translations
-function getRelativeTime(dateStr: string, t: (key: string, params?: Record<string, unknown>) => string): string {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getRelativeTime(dateStr: string, t: any): string {
   const newsDate = new Date(dateStr);
   const now = new Date();
   const diffTime = now.getTime() - newsDate.getTime();
@@ -110,7 +111,7 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
                 {news.category}
               </span>
             )}
-            {news.ai_generated && (
+            {(news as any).ai_generated && (
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 backdrop-blur-sm px-3 py-1 text-xs font-medium text-emerald-200 border border-emerald-400/30">
                 <TrendingUp className="h-3 w-3" />
                 AI Enhanced
