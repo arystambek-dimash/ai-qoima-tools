@@ -18,16 +18,13 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Copy package files and install production deps only
-COPY package*.json ./
-RUN npm install --omit=dev && npm cache clean --force
-
-# Copy built files
+# Copy built files only (esbuild bundles everything)
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/migrations ./migrations
+COPY --from=builder /app/package.json ./
 
-# Copy env file if exists (will be overridden by docker-compose)
-COPY .env* ./
+# Install only production dependencies for native modules
+RUN npm install --omit=dev && npm cache clean --force
 
 EXPOSE 8000
 
