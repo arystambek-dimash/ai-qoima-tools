@@ -14,7 +14,7 @@ NC='\033[0m'
 echo -e "${YELLOW}=== Qoima Deployment ===${NC}"
 
 # 1. Go to project directory
-cd /root/qoima-ai-took-navigator || cd /home/qoima-ai-took-navigator || {
+cd /root/ai-qoima-tools || cd /home/ai-qoima-tools || {
     echo -e "${RED}Project directory not found. Please specify the correct path.${NC}"
     exit 1
 }
