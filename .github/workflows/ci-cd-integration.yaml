@@ -1,0 +1,31 @@
+name: "Deployment"
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+on: workflow_dispatch
+
+jobs:
+  deployment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - run: npm run build
+
+      - name: Deploy to PS.KZ
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PSKZ_IP }}
+          username: ${{ secrets.PSKZ_USER }}
+          key: ${{ secrets.PSKZ_SSH_KEY }}
+          script: |
+            cd /root/ai-qoima-tools
+            git pull origin main
+            docker compose down
+            docker compose up -d --build
