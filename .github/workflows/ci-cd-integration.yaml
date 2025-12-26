@@ -12,7 +12,6 @@ jobs:
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v6
-      - run: npm ci
       - run: npm run build
 
       - name: Deploy to PS.KZ
