@@ -10,10 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-
-      - uses: actions/setup-node@v6
-      - run: npm run build
-
       - name: Deploy to PS.KZ
         uses: appleboy/ssh-action@v1.0.3
         with:
